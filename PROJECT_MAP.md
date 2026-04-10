@@ -3,7 +3,9 @@
 ```
 cursor-agent/
 ├── bot.py                      # Telegram <-> Cursor Agent CLI bridge
-├── stack.yml                   # Docker/Portainer stack
+├── stack.yml                   # Safe-by-default Docker/Portainer stack
+├── stack.safe.yml              # Explicit safe profile
+├── stack.ops.yml               # Ops profile with docker.sock and active commands
 ├── .env.example                # Minimum environment variables
 ├── README.md                   # Usage and security guide
 ├── CHANGELOG.md                # Change history

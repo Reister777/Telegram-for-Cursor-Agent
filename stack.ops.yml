@@ -8,6 +8,7 @@ services:
       - ${HOST_WORK_ROOT:-/Volume1/Dockers}:/work
       - ${HOST_AGENT_HOME:-/Volume1/Dockers/cursor-agent/home}:/home/dev
       - ${HOST_BRIDGE_CODE:-/Volume1/Dockers/cursor-agent}:/opt/cursor-telegram
+      - ${HOST_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
     environment:
       HOME: /home/dev
       DEBIAN_FRONTEND: noninteractive
@@ -16,11 +17,11 @@ services:
       DEFAULT_WORKDIR: /work
       STATE_DB_PATH: /home/dev/.cursor-telegram/state.db
       AGENT_CMD: agent
-      # Safe default profile for public deployments.
-      AGENT_EXTRA_ARGS: -p --output-format text --model gpt-5.4-medium
-      ENABLE_AGENT_FORCE: "false"
-      ENABLE_SHELL_COMMANDS: "false"
-      ENABLE_DOCKER_COMMANDS: "false"
+      # Ops profile: real actions enabled.
+      AGENT_EXTRA_ARGS: -p --force --output-format text --model gpt-5.4-medium
+      ENABLE_AGENT_FORCE: "true"
+      ENABLE_SHELL_COMMANDS: "true"
+      ENABLE_DOCKER_COMMANDS: "true"
       REQUIRE_DANGEROUS_CONFIRMATION: "true"
       ALLOWED_SHELL_COMMAND_PREFIXES: ""
       AGENT_TIMEOUT: "3600"
@@ -37,9 +38,9 @@ services:
       - |
         set -euo pipefail
 
-        if ! command -v python3 >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+        if ! command -v python3 >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
           apt-get update
-          apt-get install -y --no-install-recommends python3 git curl ca-certificates
+          apt-get install -y --no-install-recommends python3 git docker.io curl ca-certificates
         fi
 
         if [ ! -x "$HOME/.local/bin/agent" ] && [ ! -x "$HOME/.local/bin/cursor-agent" ]; then

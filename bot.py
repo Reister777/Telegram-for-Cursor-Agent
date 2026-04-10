@@ -7,6 +7,7 @@ import html
 import json
 import logging
 import os
+import re
 import shlex
 import sqlite3
 import subprocess
@@ -47,6 +48,30 @@ MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "24"))
 TELEGRAM_POLL_TIMEOUT = int(os.getenv("TELEGRAM_POLL_TIMEOUT", "30"))
 TELEGRAM_CHUNK_SIZE = int(os.getenv("TELEGRAM_CHUNK_SIZE", "3900"))
 MEMORY_TEXT_LIMIT = int(os.getenv("MEMORY_TEXT_LIMIT", "1800"))
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+ENABLE_SHELL_COMMANDS = env_bool("ENABLE_SHELL_COMMANDS", False)
+ENABLE_DOCKER_COMMANDS = env_bool("ENABLE_DOCKER_COMMANDS", False)
+ENABLE_AGENT_FORCE = env_bool("ENABLE_AGENT_FORCE", False)
+REQUIRE_DANGEROUS_CONFIRMATION = env_bool("REQUIRE_DANGEROUS_CONFIRMATION", True)
+ALLOWED_SHELL_COMMAND_PREFIXES = [
+    part.strip()
+    for part in os.getenv("ALLOWED_SHELL_COMMAND_PREFIXES", "").split(",")
+    if part.strip()
+]
+DANGEROUS_COMMAND_PATTERN = re.compile(
+    r"(^|\s)(rm\s+-rf|mkfs|dd\s+if=|shutdown|reboot|poweroff|halt|docker\s+rm|docker\s+rmi|docker\s+system\s+prune|docker\s+volume\s+rm|>\s*/dev/sd)",
+    re.IGNORECASE,
+)
+if not ENABLE_AGENT_FORCE:
+    AGENT_EXTRA_ARGS = [arg for arg in AGENT_EXTRA_ARGS if arg != "--force"]
 
 
 def resolve_allowed_path(raw_path: str, base: Path | None = None, must_exist: bool = True) -> Path:
@@ -365,6 +390,24 @@ def run_process(command: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
     return completed.returncode, combined
 
 
+def split_confirmation_prefix(command_text: str) -> tuple[bool, str]:
+    stripped = command_text.strip()
+    if stripped.lower().startswith("confirm "):
+        return True, stripped[len("confirm ") :].strip()
+    return False, stripped
+
+
+def command_allowed_by_prefixes(command_text: str) -> bool:
+    if not ALLOWED_SHELL_COMMAND_PREFIXES:
+        return True
+    lowered = command_text.strip().lower()
+    return any(lowered.startswith(prefix.lower()) for prefix in ALLOWED_SHELL_COMMAND_PREFIXES)
+
+
+def looks_dangerous(command_text: str) -> bool:
+    return bool(DANGEROUS_COMMAND_PATTERN.search(command_text))
+
+
 def build_agent_prompt(chat_id: int, current_dir: Path, user_prompt: str) -> str:
     transcript_lines = []
     for row in load_history(chat_id, MAX_HISTORY_MESSAGES):
@@ -412,34 +455,64 @@ def handle_agent(chat_id: int, text: str) -> None:
 
 
 def handle_shell(chat_id: int, command_text: str) -> None:
+    if not ENABLE_SHELL_COMMANDS:
+        send_text(chat_id, "Shell commands are disabled by configuration.")
+        return
+
     if not command_text.strip():
         send_text(chat_id, "Usage: /shell <command>")
         return
 
+    confirmed, clean_command = split_confirmation_prefix(command_text)
+    if not command_allowed_by_prefixes(clean_command):
+        send_text(chat_id, "This shell command is not allowed by ALLOWED_SHELL_COMMAND_PREFIXES policy.")
+        return
+
+    if REQUIRE_DANGEROUS_CONFIRMATION and looks_dangerous(clean_command) and not confirmed:
+        send_text(
+            chat_id,
+            "Dangerous command detected. Re-send with `confirm ` prefix to execute.\n"
+            "Example: /shell confirm <command>",
+        )
+        return
+
     cwd = get_cwd(chat_id)
     send_chat_action(chat_id, "typing")
-    exit_code, output = run_process(["bash", "-lc", command_text], cwd, SHELL_TIMEOUT)
-    append_message(chat_id, "user", f"/shell {command_text}")
+    exit_code, output = run_process(["bash", "-lc", clean_command], cwd, SHELL_TIMEOUT)
+    append_message(chat_id, "user", f"/shell {clean_command}")
     append_message(chat_id, "assistant", f"[shell exit={exit_code}] {output}")
     send_text(chat_id, f"[shell exit={exit_code}]\n{output}")
 
 
 def handle_docker(chat_id: int, command_text: str) -> None:
+    if not ENABLE_DOCKER_COMMANDS:
+        send_text(chat_id, "Docker commands are disabled by configuration.")
+        return
+
     if not command_text.strip():
         send_text(chat_id, "Usage: /docker <args>. Example: /docker ps")
+        return
+
+    confirmed, clean_command = split_confirmation_prefix(command_text)
+    if REQUIRE_DANGEROUS_CONFIRMATION and looks_dangerous(f"docker {clean_command}") and not confirmed:
+        send_text(
+            chat_id,
+            "Potentially dangerous docker command detected. Re-send with `confirm ` prefix to execute.\n"
+            "Example: /docker confirm <args>",
+        )
         return
 
     cwd = get_cwd(chat_id)
     send_chat_action(chat_id, "typing")
 
     try:
-        docker_args = shlex.split(command_text)
+        docker_args = shlex.split(clean_command)
     except ValueError as exc:
         send_text(chat_id, f"Could not parse docker command: {exc}")
         return
 
     exit_code, output = run_process(["docker", *docker_args], cwd, SHELL_TIMEOUT)
-    append_message(chat_id, "user", f"/docker {command_text}")
+    append_message(chat_id, "user", f"/docker {clean_command}")
     append_message(chat_id, "assistant", f"[docker exit={exit_code}] {output}")
     send_text(chat_id, f"[docker exit={exit_code}]\n{output}")
 
@@ -468,7 +541,7 @@ def handle_status(chat_id: int) -> None:
         (chat_id,),
     ).fetchone()["count"]
 
-    git_branch = "(sin repo git)"
+    git_branch = "(not a git repo)"
     try:
         exit_code, output = run_process(["git", "branch", "--show-current"], cwd, 5)
         if exit_code == 0 and output.strip():
@@ -476,13 +549,13 @@ def handle_status(chat_id: int) -> None:
     except Exception:
         pass
 
-    docker_state = "disponible"
+    docker_state = "available"
     try:
         exit_code, output = run_process(["docker", "version", "--format", "{{.Server.Version}}"], cwd, 10)
         if exit_code == 0 and output.strip() != "(no output)":
             docker_state = output.strip()
     except Exception:
-        docker_state = "no comprobado"
+        docker_state = "not checked"
 
     send_text(
         chat_id,
@@ -610,7 +683,7 @@ def main() -> None:
             if ALLOWED_CHAT_IDS:
                 for chat_id in ALLOWED_CHAT_IDS:
                     try:
-                        send_text(chat_id, "Una tarea ha excedido el timeout configurado.")
+                        send_text(chat_id, "A task exceeded the configured timeout.")
                     except Exception:
                         logging.exception("Could not notify timeout to %s", chat_id)
             time.sleep(2)

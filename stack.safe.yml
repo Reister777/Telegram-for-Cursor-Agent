@@ -16,7 +16,6 @@ services:
       DEFAULT_WORKDIR: /work
       STATE_DB_PATH: /home/dev/.cursor-telegram/state.db
       AGENT_CMD: agent
-      # Safe default profile for public deployments.
       AGENT_EXTRA_ARGS: -p --output-format text --model gpt-5.4-medium
       ENABLE_AGENT_FORCE: "false"
       ENABLE_SHELL_COMMANDS: "false"

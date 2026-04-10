@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added runtime hardening controls in `bot.py`: `ENABLE_SHELL_COMMANDS`, `ENABLE_DOCKER_COMMANDS`, `ENABLE_AGENT_FORCE`, dangerous-command confirmation, and shell prefix allowlist.
+- Added profile-based stacks: `stack.safe.yml` and `stack.ops.yml`.
+- Changed `stack.yml` to safe defaults (no `docker.sock`, no `--force`, no `/shell` or `/docker` by default).
+- Updated docs and examples for safe vs ops deployment profiles.
 - Set a fixed CLI model in `stack.yml` with `--model gpt-5.4-medium` in `AGENT_EXTRA_ARGS` so the Telegram bridge does not rely only on `auto`.
 - Added `stack.yml` for Portainer with Cursor Agent, Telegram bridge, and Docker socket access.
 - Added `bot.py` with Telegram polling, SQLite memory, shell commands, Docker commands, and `agent` chat mode.
