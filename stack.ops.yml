@@ -37,6 +37,8 @@ services:
       - -lc
       - |
         set -euo pipefail
+        dpkg --configure -a || true
+        apt-get -f install -y || true
 
         if ! command -v python3 >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
           apt-get update

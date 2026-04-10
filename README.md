@@ -81,3 +81,11 @@ Before publishing:
 - add `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, and minimal CI;
 - confirm that `home/`, `.env`, and local artifacts are ignored by Git;
 - review compliance with the CLI/model provider terms of use (Cursor).
+
+## Versioning
+
+This project follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
+
+- Current version is stored in `VERSION`.
+- Public changes are tracked in `CHANGELOG.md`.
+- Recommended release flow: bump `VERSION` + update `CHANGELOG.md` + create tag `vX.Y.Z`.
