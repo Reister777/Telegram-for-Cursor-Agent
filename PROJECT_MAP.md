@@ -9,6 +9,7 @@ cursor-agent/
 ├── .env.example                # Minimum environment variables
 ├── README.md                   # Usage and security guide
 ├── CHANGELOG.md                # Change history
+├── VERSION                     # Current SemVer version
 ├── ROADMAP.md                  # Improvement plan
 ├── LICENSE                     # Project license
 ├── SECURITY.md                 # Security policy

@@ -4,6 +4,7 @@
 
 - Fixed ops startup resilience in `stack.ops.yml` by adding `dpkg --configure -a` and `apt-get -f install -y` preflight recovery to avoid bootloops after interrupted package operations.
 - Added `VERSION` file and documented Semantic Versioning workflow in `README.md`.
+- Updated `PROJECT_MAP.md` to include `VERSION`.
 - Added runtime hardening controls in `bot.py`: `ENABLE_SHELL_COMMANDS`, `ENABLE_DOCKER_COMMANDS`, `ENABLE_AGENT_FORCE`, dangerous-command confirmation, and shell prefix allowlist.
 - Added profile-based stacks: `stack.safe.yml` and `stack.ops.yml`.
 - Changed `stack.yml` to safe defaults (no `docker.sock`, no `--force`, no `/shell` or `/docker` by default).
