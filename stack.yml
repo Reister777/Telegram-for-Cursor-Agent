@@ -1,0 +1,48 @@
+services:
+  cursor-agent:
+    image: ubuntu:24.04
+    container_name: cursor-agent
+    restart: unless-stopped
+    working_dir: /work
+    volumes:
+      - ${HOST_WORK_ROOT:-/Volume1/Dockers}:/work
+      - ${HOST_AGENT_HOME:-/Volume1/Dockers/cursor-agent/home}:/home/dev
+      - ${HOST_BRIDGE_CODE:-/Volume1/Dockers/cursor-agent}:/opt/cursor-telegram
+      - ${HOST_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    environment:
+      HOME: /home/dev
+      DEBIAN_FRONTEND: noninteractive
+      PYTHONUNBUFFERED: "1"
+      WORK_ROOT: /work
+      DEFAULT_WORKDIR: /work
+      STATE_DB_PATH: /home/dev/.cursor-telegram/state.db
+      AGENT_CMD: agent
+      # Fixed model for Telegram (list IDs with: agent models). "Cortex" in the app is not a CLI model ID.
+      AGENT_EXTRA_ARGS: -p --force --output-format text --model gpt-5.4-medium
+      AGENT_TIMEOUT: "3600"
+      SHELL_TIMEOUT: "300"
+      MAX_HISTORY_MESSAGES: "24"
+      TELEGRAM_POLL_TIMEOUT: "30"
+      TELEGRAM_CHUNK_SIZE: "3900"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS}
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/dev/.local/bin
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+
+        if ! command -v python3 >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
+          apt-get update
+          apt-get install -y --no-install-recommends python3 git docker.io curl ca-certificates
+        fi
+
+        if [ ! -x "$HOME/.local/bin/agent" ] && [ ! -x "$HOME/.local/bin/cursor-agent" ]; then
+          curl https://cursor.com/install -fsS | bash
+        fi
+
+        mkdir -p "$HOME/.cursor-telegram"
+        cd /opt/cursor-telegram
+
+        exec python3 /opt/cursor-telegram/bot.py
